@@ -1,205 +1,156 @@
-# Diffie Date
 
-A secure, double-blind, mutual matching platform built with React Router, Remix-style SSR, and end-to-end cryptography.
 
-<div align="center">
-  <p><em>Find your match. No one else ever knows who you liked.</em></p>
-</div>
+# GarbleDate
 
----
+A playful demo of how mutual interest can be privately and securely expressed using garbled circuits and elliptic curve cryptography—without a central authority learning who likes who.
 
-## Table of Contents
-
-- [What is Diffie Date?](#what-is-diffie-date)
-- [Cryptographic Protocol Overview](#cryptographic-protocol-overview)
-  - [1. Key Generation](#1-key-generation)
-  - [2. Self Token](#2-self-token)
-  - [3. Liking Another User](#3-liking-another-user)
-  - [4. Mutual Match Discovery](#4-mutual-match-discovery)
-  - [5. Payload Padding and Validation](#5-payload-padding-and-validation)
-  - [6. Privacy Properties](#6-privacy-properties)
-- [App Structure](#app-structure)
-- [How to Run](#how-to-run)
-- [Deployment (Docker, etc.)](#deployment-docker-etc)
-- [FAQ](#faq)
-- [Acknowledgements](#acknowledgements)
+This app is not a real dating app. It’s a math toy disguised as one.
 
 ---
 
-## What is Diffie Date?
+## ✨ What It Does
 
-**Diffie Date** is a proof-of-concept "Tinder-like" app, but with a twist:
+Each user selects categories of interaction they’d be open to with others—e.g., “fight,” “date,” “co-op video game,” “have a child with.” Then they can express a private like (or not-like) for another user in any category. The twist:
 
-- **No server can ever know who liked whom.**
-- **Only mutual likes are revealed.**
-- **All cryptographic keys are generated client-side and never leave your device.**
-
-This project is meant as a minimal, auditable demonstration of how modern cryptography can provide real user privacy even in social/dating apps—without trusting the backend.
+* Likes are *cryptographically encoded* using garbled circuits.
+* You only learn that someone liked you **if you also liked them back**.
+* The server remains oblivious to the content of all preferences.
 
 ---
 
-## Cryptographic Protocol Overview
+## 🔐 Core Idea
 
-The core cryptographic design follows a simplified, double-blind, mutual match protocol using secp256k1 (the Bitcoin/Ethereum curve) and Diffie-Hellman key exchange.
+We use a **single garbled AND gate** to represent mutual liking:
 
-The following is the actual, implemented flow (see [`app/math/crypto.ts`](./app/math/crypto.ts)):
-
-### 1. Key Generation
-
-Each user generates a **private key** \( s \) and corresponding **public key** \( P = g^s \) (using secp256k1).
-
-- Your user ID is: `sha256(P)`
-
-### 2. Self Token
-
-Each user computes a "self token" for authentication and registry uniqueness:
-\[
-S = H(P)^s
-\]
-Where \( H \) is a hash-to-curve function, using [RFC-9380 Simplified-SWU](https://datatracker.ietf.org/doc/html/rfc9380).
-
-### 3. Liking Another User
-
-To "like" user B, user A computes a **like token**:
-\[
-L_{A \to B} = P_B^{s_A} = g^{s_A s_B}
-\]
-This is a standard Diffie-Hellman shared secret *as a curve point*.
-
-- User A creates an encrypted, padded payload containing their ID and category (e.g., "Want to date"), using:
-  \[
-  K = \text{HKDF}(L_{A \to B})
-  \]
-  as the AES-GCM key.
-- A sends (`token`, `cipher`, `iv`) to the server.
-- No information about the "like" can be gleaned by the server from this data.
-
-### 4. Mutual Match Discovery
-
-If **both** users like each other:
-
-- The server sees two ciphers for the same token \( L \) (DH symmetry: \( L_{A \to B} = L_{B \to A} \)).
-- Each user can now use \( K \) to decrypt the other's payload, revealing each other's ID and category **only if the match is mutual**.
-
-### 5. Payload Padding and Validation
-
-- All payloads are padded to a fixed length (default: 256 bytes) to resist traffic analysis.
-- Upon decryption:
-  - The payload is UTF-8 decoded, parsed as JSON, and checked for the correct version and nonce.
-  - Any tampering or corruption results in a hard error (rejection). Silent failure is impossible by construction.
-- This ensures robust error handling and downgrade attack resistance.
-
-### 6. Privacy Properties
-
-- **No private keys, likes, or user data ever reach the server.**
-- **Non-mutual likes remain secret, even from the server.**
-- **Tokens are unlinkable to public keys or user identities.**
-- **All authentication is implicit in the cryptography—no signatures or explicit proofs required.**
-
----
-
-## App Structure
-
-### Major Folders and Files
-
-- [`app/`](./app/)
-  - `math/crypto.ts` — All cryptographic primitives and helpers (keygen, tokens, AES-GCM, etc)
-  - `routes/` — Remix/React Router app routes (`index.tsx` main entry)
-    - `components/` — UI components (users list, debug panel, category selector, etc)
-  - `utils/db.*.ts` — Dumb file- or localStorage-backed DB used for demo (not production-grade)
-- `.react-router/types/` — Autogenerated type-safe route typings
-- `Dockerfile` — Multi-stage build for production or dev
-
-### Key Concepts
-
-- **Server never sees any secrets** — it's just a mailbox for tokens and ciphers.
-- **All encryption/decryption happens client-side** (WebCrypto).
-- **Self-registration and usernames** use unique tokens and can be edited in-app.
-
----
-
-## How to Run
-
-### Prerequisites
-
-- Node.js v20+ recommended
-- (For prod) Docker
-
-### Dev Mode
-
-```sh
-npm install
-npm run dev
-````
-
-* Visit [http://localhost:5173](http://localhost:5173)
-
-### Production Build
-
-```sh
-npm run build
-npm run start
+```
+A Likes B = a ∈ {0,1}
+B Likes A = b ∈ {0,1}
+Output = a AND b
 ```
 
-### Docker
-
-```sh
-docker build -t diffiedate .
-docker run -p 3000:3000 diffiedate
-```
+This simple function allows us to compute mutual interest privately.
 
 ---
 
-## Deployment (Docker, etc.)
+## 💡 Garbled Circuit Primer
 
-Container can be run anywhere. For SSR, run as `node:20-alpine`, mapped to your port of choice (default 3000).
+The garbled circuit is a 2-input, 1-output AND gate, where:
 
-Persistent data is stored in `db.json` in the container; mount as a volume for persistence.
+* Each input wire (A, B) has two random *labels* (e.g., A0/A1).
+* Each output wire has two labels (R0/R1), also random.
+* The gate is garbled into 4 ciphertexts, one for each input pair (A0B0, A0B1, A1B0, A1B1), each decrypting to the correct output label.
 
-```sh
-docker run -v $PWD/db.json:/app/db.json -p 3000:3000 diffiedate
-```
-
----
-
-## FAQ
-
-### Is this production ready?
-
-No. This is a **demo** of a robust, cryptographically private protocol in a modern SSR/SPA hybrid stack. Use for fun, local events, or as a base for more complex privacy-preserving protocols.
-
-### What happens if I clear localStorage?
-
-Your identity and private key are lost forever; you'll re-register as a new user. This is intentional—no recovery without key export/import (not implemented here).
-
-### Can the server or another user ever "unblind" the likes?
-
-No, unless your private key is compromised or you physically share your secrets.
-
-### Can I audit the cryptography?
-
-Yes. All logic is in `app/math/crypto.ts`, using [noble-curves](https://github.com/paulmillr/noble-curves) and standard WebCrypto.
-
-### How does this differ from Signal or Matrix?
-
-* Signal/Matrix use double-ratchet and signatures for chat. This is "just" mutual matching, no chat or message history.
-* **Diffie Date** is much simpler, does not require signatures or authenticated sessions.
+Only the party with both correct input labels can decrypt one of the ciphertexts and obtain the correct output label.
 
 ---
 
-## Acknowledgements
+## 🔁 Protocol Flow
 
-* [noble-curves](https://github.com/paulmillr/noble-curves)
-* [React Router](https://reactrouter.com/)
-* [KaTeX](https://katex.org/) and [react-latex-next](https://www.npmjs.com/package/react-latex-next)
-* Many friends, cryptographers, and the anonymous inspiration from real-world need for actual privacy.
+**Step 1: Key Exchange (ECDH)**
+Each user generates a persistent ECDSA keypair for each category.
+
+* Public: Shared during registration.
+* Private: Stored locally only.
+
+**Step 2: Like Initialization (Alice → Bob)**
+
+* Alice derives a shared secret `S` via ECDH.
+* She deterministically derives:
+
+  * Bob’s input wire labels: `B0`, `B1`
+  * Output labels: `R0`, `R1`
+* She creates a fresh garbled AND gate with these fixed labels.
+* She selects her input label (`A0` or `A1`) based on whether she likes Bob.
+* She sends the garbled table, her input label, and the output labels to the server.
+
+**Step 3: Like Response (Bob → Server)**
+
+* If Bob decides to respond, he:
+
+  * Derives the same shared secret `S` from his private key and Alice’s public key.
+  * Derives the same `B0` and `B1`.
+  * Chooses the correct one based on whether he likes Alice.
+  * Sends his input label (`B0` or `B1`) to the server.
+
+**Step 4: Server Evaluation**
+
+* Server now holds:
+
+  * Garbled table
+  * `aInputLabel` (from Alice)
+  * `bInputLabel` (from Bob)
+
+But the server:
+
+* Can’t tell what bit either input represents
+* Can’t decrypt the table
+* Just *relays* the result label back to the client
+
+**Step 5: Match Detection (Client)**
+
+* The client who receives the result label compares it against `R0` and `R1`.
+* If it matches `R1`, it means both parties liked each other (1 & 1 = 1).
 
 ---
 
-## License
+## 🧮 Math Summary
 
-MIT
+* **Key exchange:**
+  `S = ECDH(privA, pubB) = privA × pubB = privB × pubA`
+
+* **Label derivation (HKDF):**
+  `B0 = HKDF(S, "B0")`,
+  `B1 = HKDF(S, "B1")`,
+  `R0 = HKDF(S, "R0")`,
+  `R1 = HKDF(S, "R1")`
+
+* **Garbled row encryption:**
+  Each row:
+  `C = AES-GCM(key = A ⊕ B, value = R)`
+  (in real schemes, you’d use a KDF or HMAC instead of XOR)
 
 ---
 
-*Share, fork, and build better, more private social tech.*
+## 🤖 Server Blindness
+
+The server never learns:
+
+* Who liked whom (beyond from/to metadata)
+* What the actual like value was (0 or 1)
+* Whether a match occurred
+* The meaning of any wire label
+
+This ensures full privacy unless both parties like each other.
+
+---
+
+## 📦 Storage
+
+* `users`: Stores public keys and usernames.
+* `garbledLikes`: Each like attempt, including the garbled table, input labels, and output labels.
+
+Everything sensitive is stored in base64-encoded JSON blobs, never revealing actual preference bits.
+
+---
+
+## 🧪 Test Coverage
+
+See `app/protocol.test.ts` for:
+
+* Mutual match success
+* Mismatch failure
+* Label indistinguishability
+* Consistent structure for all messages
+
+---
+
+## 🛠️ Tech Stack
+
+* **React Router v7** (server-side rendered)
+* **Tailwind CSS** for UI
+* **@noble/curves** for ECDH
+* **WebCrypto (AES-GCM)** for encryption
+* **LocalStorage / fs** for persistent storage
+* **Remix-style loader/actions** for request handling
+
+---

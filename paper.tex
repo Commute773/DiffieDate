@@ -1,0 +1,161 @@
+\documentclass[12pt]{article}
+\usepackage{amsmath, amssymb}
+\usepackage{hyperref}
+\usepackage{graphicx}
+\usepackage[margin=1in]{geometry}
+\usepackage{listings}
+\usepackage{color}
+\usepackage{mathtools}
+\usepackage{physics}
+
+\title{DiffieDate: Private Mutual Matching via Garbled Circuits}
+\author{}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\section*{Overview}
+
+Garble Date is a demo application implementing a private mutual matching protocol based on garbled circuits and elliptic curve Diffie-Hellman (ECDH). It allows users to express preferences across various categories (e.g., ``Date'', ``Fight'', ``Have child with'') without revealing any single-sided preferences unless a mutual match occurs.
+
+The protocol is designed such that:
+\begin{itemize}
+  \item No third party (including the server) learns individual preferences.
+  \item Mutual preferences can be confirmed without revealing non-matching ones.
+  \item Cryptographic keys are derived from ECDH key exchange, ensuring each user pair has a unique shared secret.
+\end{itemize}
+
+\vspace{1em}
+
+\section*{Mathematical Foundations}
+
+\subsection*{ECDH Key Exchange}
+
+Each user has a persistent elliptic curve key pair for each category:
+\[
+\text{User } U_i \rightarrow (sk_i, pk_i)
+\]
+Public keys are registered on the server. Private keys are stored locally.
+
+To derive a shared secret between users $A$ and $B$:
+\[
+S_{AB} = \text{ECDH}(sk_A, pk_B) = sk_A \cdot pk_B = sk_B \cdot pk_A
+\]
+
+We strip the leading byte from the compressed shared secret (as required by the noble library used in implementation).
+
+\subsection*{HKDF Derivation of Wire Labels}
+
+Using the shared secret $S$, we derive the labels for Bob's input wire and the output wire:
+
+\[
+\begin{aligned}
+B_0 &= \text{HKDF}_{\text{SHA-256}}(S, \texttt{``B0''}) \\
+B_1 &= \text{HKDF}_{\text{SHA-256}}(S, \texttt{``B1''}) \\
+R_0 &= \text{HKDF}_{\text{SHA-256}}(S, \texttt{``R0''}) \\
+R_1 &= \text{HKDF}_{\text{SHA-256}}(S, \texttt{``R1''})
+\end{aligned}
+\]
+
+Alice generates fresh random labels $A_0$, $A_1$ for her input wire.
+
+\subsection*{Garbled Circuit Construction}
+
+We construct a single AND gate. The truth table is:
+
+\[
+\begin{array}{ccc}
+A & B & R = A \land B \\
+\hline
+0 & 0 & 0 \\
+0 & 1 & 0 \\
+1 & 0 & 0 \\
+1 & 1 & 1 \\
+\end{array}
+\]
+
+For each input pair $(A_i, B_j)$, we derive a symmetric key using XOR:
+\[
+K_{ij} = A_i \oplus B_j
+\]
+
+Each output label $R_k \in \{R_0, R_1\}$ is encrypted using AES-GCM under $K_{ij}$ with a random IV:
+\[
+C_{ij} = \text{AES-GCM}_{K_{ij}}(R_k)
+\]
+
+The full garbled table is:
+\[
+\text{table} = \{ C_{00}, C_{01}, C_{10}, C_{11} \}
+\]
+
+The table is randomly shuffled to hide row ordering.
+
+\subsection*{Protocol Steps}
+
+\subsubsection*{Step 1: Registration}
+
+Each user generates a key pair $(sk, pk)$ per category and registers with:
+\[
+\text{user ID} = \text{SHA-256}(pk) \concat \text{username} \concat \text{category}
+\]
+
+\subsubsection*{Step 2: Alice Likes Bob}
+
+Alice derives shared secret $S$, computes $B_0$, $B_1$, $R_0$, $R_1$ via HKDF.
+
+She generates a garbled AND gate using fresh $A_0$, $A_1$ and the derived $B_i$, $R_i$.
+
+She chooses her input label:
+\[
+a = \text{bit indicating like or not} \in \{0,1\},\quad A = A_a
+\]
+
+Alice sends to the server:
+\[
+\text{GarbledLike} = \{ \text{from}, \text{to}, \text{garbledTable}, A, (R_0, R_1) \}
+\]
+
+\subsubsection*{Step 3: Bob Responds}
+
+Bob derives $S$, then derives $B_0$, $B_1$ using HKDF. He picks his label $B = B_b$ and sends it to the server.
+
+\subsubsection*{Step 4: Server Evaluation}
+
+The server cannot decrypt anything. It simply relays the data.
+
+\subsubsection*{Step 5: Client Decryption}
+
+The client (either Alice or Bob) uses:
+\[
+K = A \oplus B
+\]
+to try decrypting each ciphertext in the shuffled table until one succeeds. The result is a label $R$.
+
+If $R = R_1$, the output is 1 — a match. Otherwise, not.
+
+\[
+\text{Match} \iff R = R_1
+\]
+
+\section*{Privacy Guarantees}
+
+\begin{itemize}
+  \item \textbf{Server blindness:} The server never learns $a$ or $b$, nor the result.
+  \item \textbf{Unilateral secrecy:} If only Alice likes Bob, Bob never learns.
+  \item \textbf{Determinism:} Given keys are persistent, labels are always the same for a given user-pair.
+  \item \textbf{Forward secrecy:} Assuming ephemeral keys are used (optional), mutual likes can't be retroactively decrypted.
+\end{itemize}
+
+\section*{Implementation Notes}
+
+\begin{itemize}
+  \item AES-GCM is used with 128-bit keys and 12-byte IVs.
+  \item XOR is used as a toy key-derivation; replace with a secure KDF like HKDF in production.
+  \item All messages are serialized in base64 and stored as strings.
+  \item Client-side logic performs decryption; server acts as a blind relay.
+\end{itemize}
+
+\end{document}

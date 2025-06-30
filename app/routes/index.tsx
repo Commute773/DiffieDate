@@ -1,138 +1,170 @@
-import { useEffect, useState } from "react";
-import type { LoaderDataType } from "./loader.server";
-import { getOrCreateKeys } from "./keygen.client";
-import { useLoaderData, useSubmit } from "react-router";
-import { useLikedUsers } from "./components/useLikedUsers";
-import { UsersList } from "./components/UsersList";
-import { IdentityPanel } from "./components/IdentityPanel";
-import { CategorySelector } from "./components/CategorySelector";
-import { MatchPanel } from "./components/MatchPanel";
-import { DebugPanel } from "./components/DebugPanel";
-import { CATEGORIES } from "./components/IdentityPanel";
-import { handleLikeSubmit } from "~/math/likeSubmit";
-import type { User } from "~/utils/db.types";
-import { HowItWorksPanel } from "./components/HowItWorksPanel";
-
-// For collapsible panels
-function AccordionSection({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
-  const [open, setOpen] = useState(false);
-  return (
-    <section className="mb-3 rounded shadow bg-white dark:bg-gray-900">
-      <button
-        className="w-full text-left p-3 font-semibold border-b border-gray-200 dark:border-gray-800 flex justify-between items-center"
-        onClick={() => setOpen((o) => !o)}
-      >
-        {title}
-        <span>{open ? "▾" : "▸"}</span>
-      </button>
-      {open && <div className="p-3">{children}</div>}
-    </section>
-  );
-}
+import { RegisterForm } from "./components/RegisterForm";
+import { CATEGORIES } from "~/utils/constants";
+import { useIndexPage } from "./useIndexPage";
+import { NukeLocalStorage } from "./components/NukeLS";
 
 export { loader } from "./loader.server";
 
 export default function Index() {
-  const { users, inbox } = useLoaderData<LoaderDataType>();
-  const submit = useSubmit();
-  const [username, setUsername] = useState<string | null>(null);
+  const {
+    localCryptos,
+    register,
+    myIds,
+    registered,
+    groupedUsers,
+    alreadyLiked,
+    handleSendLike,
+    pendingForMe,
+    handleRespondToLike,
+    matches,
+  } = useIndexPage();
 
-  // Key and user state
-  const [priv, setPriv] = useState<string | null>(null);
-  const [pub, setPub] = useState<string | null>(null);
-  const [selfToken, setSelfToken] = useState<string | null>(null);
-  const [id, setId] = useState<string | null>(null);
-
-  useEffect(() => {
-    getOrCreateKeys().then(({ priv, pub, selfToken, id }) => {
-      setPriv(priv);
-      setPub(pub);
-      setSelfToken(selfToken);
-      setId(id);
-    });
-  }, []);
-
-  useEffect(() => {
-    if (id && !username) {
-      const user = users.find((u) => u.id === id);
-      if (user) setUsername(user.username || "");
-    }
-  }, [id, username, users]);
-
-  // Register user if not already present
-  useEffect(() => {
-    if (id && pub && selfToken && !users.find((u) => u.id === id)) {
-      const formData = new FormData();
-      formData.append("formKey", "registerUser");
-      formData.append("id", id);
-      formData.append("publicKey", pub);
-      formData.append("selfToken", selfToken);
-      submit(formData, { method: "post", action: "/" });
-    }
-  }, [id, pub, selfToken, users, submit]);
-
-  // Like state and logic
-  const [cat, setCat] = useState<string>(CATEGORIES[0]);
-  const [likedUsers, setLikedUsers] = useLikedUsers();
-
-  // Main like action, no page reload
-  async function handleLikeUser(u: User) {
-    if (!priv || !id) return;
-    await handleLikeSubmit(submit, priv, id, u, cat);
-    setLikedUsers((prev) => new Set(prev).add(u.id));
-  }
-
-  if (!id || !pub || !priv || !selfToken) {
+  if (!localCryptos || Object.keys(localCryptos).length === 0 || !registered) {
     return (
-      <div className="mx-auto max-w-xl p-8 text-black">
-        <h1 className="text-3xl font-bold mb-4 text-white">Diffie Date</h1>
-        <p className="text-lg">Generating keys...</p>
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 dark:bg-neutral-900">
+        <div className="bg-white dark:bg-neutral-800 p-8 rounded-2xl shadow-xl w-full max-w-md">
+          <RegisterForm register={register} />
+          <NukeLocalStorage />
+        </div>
       </div>
     );
   }
 
-  // Optionally: show yourself at the top
-  const me = users.find((u) => u.id === id);
-
   return (
-    <div className="mx-auto max-w-xl p-4 text-black dark:text-white">
-      <header className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl font-bold tracking-tight">Diffie Date</h1>
-      </header>
-      <IdentityPanel
-        username={username}
-        setUsername={setUsername}
-        id={id}
-        pub={pub}
-      />
-      <CategorySelector value={cat} onChange={setCat} />
-      {me && (
-        <div className="mb-6 flex items-center gap-3 p-4 rounded-xl bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
-          <div className="w-8 h-8 rounded-full bg-gray-300 dark:bg-gray-700 flex items-center justify-center font-bold">
-            {me.username?.[0]?.toUpperCase() ?? "Y"}
-          </div>
-          <span className="font-medium">You: {me.username}</span>
-        </div>
+    <main className="min-h-screen bg-gray-50 dark:bg-neutral-900 py-12 px-4 flex flex-col items-center">
+      <section className="mb-10 w-full max-w-2xl">
+        <h1 className="text-4xl font-bold mb-2 tracking-tight text-center text-gray-900 dark:text-gray-100">
+          Garble Date
+        </h1>
+        <p className="text-center text-lg text-gray-500 dark:text-gray-400 mb-4">
+          Users:{" "}
+          <span className="font-semibold">
+            {Object.keys(groupedUsers).length}
+          </span>
+        </p>
+      </section>
+
+      <section className="w-full max-w-2xl mb-12">
+        <h2 className="text-2xl font-semibold mb-4 text-gray-900 dark:text-gray-100">
+          Other Users
+        </h2>
+        <ul className="space-y-4">
+          {Object.entries(groupedUsers).map(([base, users]) => (
+            <li
+              key={base}
+              className="bg-white dark:bg-neutral-800 rounded-2xl shadow p-5"
+            >
+              <div className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-2">
+                {base}
+              </div>
+              <div className="flex flex-wrap gap-3">
+                {CATEGORIES.map((cat) => {
+                  const user = users.find((u) => u.category === cat);
+                  if (!user) return null;
+                  const myId = myIds[cat];
+                  if (!myId || user.id === myId) return null;
+                  if (alreadyLiked(myId, user.id)) return null;
+                  //if pendingForMe, skip
+                  if (
+                    pendingForMe.some(
+                      (l) => l.like.from === user.id && l.myCategory === cat
+                    )
+                  )
+                    return null;
+                  //if matched, skip
+                  if (
+                    matches.some(
+                      (m) => m.user.id === user.id && m.category === cat
+                    )
+                  )
+                    return null;
+                  const localCrypto = localCryptos[cat];
+                  return (
+                    <div key={cat} className="flex flex-col">
+                      <button
+                        title={`Like ${cat}`}
+                        onClick={async () =>
+                          handleSendLike(myId, user, localCrypto, true)
+                        }
+                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold shadow transition whitespace-nowrap"
+                      >
+                        {cat}
+                      </button>
+                      <button
+                        title={`Don't ${cat}`}
+                        onClick={async () =>
+                          handleSendLike(myId, user, localCrypto, false)
+                        }
+                        className="px-4 py-2 bg-gray-300 hover:bg-gray-400 dark:bg-neutral-700 dark:hover:bg-neutral-600 text-gray-800 dark:text-gray-200 rounded-xl text-sm font-semibold shadow transition mt-1 whitespace-nowrap"
+                      >
+                        Don't {cat}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      {pendingForMe.length > 0 && (
+        <section className="w-full max-w-2xl mb-12">
+          <h2 className="text-2xl font-semibold mb-4 text-gray-900 dark:text-gray-100">
+            Pending Likes for You
+          </h2>
+          <ul className="space-y-4">
+            {pendingForMe.map(({ like: l, myCategory, username }) => {
+              const label = username;
+              return (
+                <li
+                  key={l.id}
+                  className="bg-white dark:bg-neutral-800 rounded-2xl shadow p-5 flex items-center justify-between"
+                >
+                  <div className="font-medium text-gray-700 dark:text-gray-200">
+                    {label}: {myCategory}
+                  </div>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => handleRespondToLike(l, myCategory, true)}
+                      className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-xl font-semibold shadow transition"
+                    >
+                      Like back
+                    </button>
+                    <button
+                      onClick={() => handleRespondToLike(l, myCategory, false)}
+                      className="px-4 py-2 bg-gray-300 hover:bg-gray-400 dark:bg-neutral-700 dark:hover:bg-neutral-600 text-gray-800 dark:text-gray-200 rounded-xl font-semibold shadow transition"
+                    >
+                      Ignore
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
       )}
-      <UsersList
-        users={users}
-        currentId={id}
-        likedUsers={likedUsers}
-        onLikeUser={handleLikeUser}
-      />
-      <AccordionSection title="Matches">
-        <MatchPanel users={users} inbox={inbox} me={id} />
-      </AccordionSection>
-      <AccordionSection title="Debug">
-        <DebugPanel users={users} inbox={inbox} />
-      </AccordionSection>
-      <HowItWorksPanel />
-    </div>
+
+      <section className="w-full max-w-2xl">
+        <h2 className="text-2xl font-semibold mb-4 text-gray-900 dark:text-gray-100">
+          Your Matches
+        </h2>
+        <ul className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {matches.map(({ category, user }) => (
+            <li
+              key={user.id + category}
+              className="bg-white dark:bg-neutral-800 rounded-2xl shadow p-4 flex flex-col items-center"
+            >
+              <span className="font-medium text-gray-900 dark:text-gray-100">
+                {user.username}
+              </span>
+              <span className="text-sm text-gray-500 dark:text-gray-400">
+                {category}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </section>
+    </main>
   );
 }
