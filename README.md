@@ -3,7 +3,6 @@
 A secure, double-blind, mutual matching platform built with React Router, Remix-style SSR, and end-to-end cryptography.
 
 <div align="center">
-  <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/8/8a/Diffie%E2%80%93Hellman_Key_Exchange.svg/768px-Diffie%E2%80%93Hellman_Key_Exchange.svg.png" width="380" alt="Diffie-Hellman" />
   <p><em>Find your match. No one else ever knows who you liked.</em></p>
 </div>
 
