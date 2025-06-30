@@ -1,87 +1,210 @@
-# Welcome to React Router!
+````md
+# Diffie Date
 
-A modern, production-ready template for building full-stack React applications using React Router.
+A secure, double-blind, mutual matching platform built with React Router, Remix-style SSR, and end-to-end cryptography.
 
-[![Open in StackBlitz](https://developer.stackblitz.com/img/open_in_stackblitz.svg)](https://stackblitz.com/github/remix-run/react-router-templates/tree/main/default)
-
-## Features
-
-- 🚀 Server-side rendering
-- ⚡️ Hot Module Replacement (HMR)
-- 📦 Asset bundling and optimization
-- 🔄 Data loading and mutations
-- 🔒 TypeScript by default
-- 🎉 TailwindCSS for styling
-- 📖 [React Router docs](https://reactrouter.com/)
-
-## Getting Started
-
-### Installation
-
-Install the dependencies:
-
-```bash
-npm install
-```
-
-### Development
-
-Start the development server with HMR:
-
-```bash
-npm run dev
-```
-
-Your application will be available at `http://localhost:5173`.
-
-## Building for Production
-
-Create a production build:
-
-```bash
-npm run build
-```
-
-## Deployment
-
-### Docker Deployment
-
-To build and run using Docker:
-
-```bash
-docker build -t my-app .
-
-# Run the container
-docker run -p 3000:3000 my-app
-```
-
-The containerized application can be deployed to any platform that supports Docker, including:
-
-- AWS ECS
-- Google Cloud Run
-- Azure Container Apps
-- Digital Ocean App Platform
-- Fly.io
-- Railway
-
-### DIY Deployment
-
-If you're familiar with deploying Node applications, the built-in app server is production-ready.
-
-Make sure to deploy the output of `npm run build`
-
-```
-├── package.json
-├── package-lock.json (or pnpm-lock.yaml, or bun.lockb)
-├── build/
-│   ├── client/    # Static assets
-│   └── server/    # Server-side code
-```
-
-## Styling
-
-This template comes with [Tailwind CSS](https://tailwindcss.com/) already configured for a simple default starting experience. You can use whatever CSS framework you prefer.
+<div align="center">
+  <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/8/8a/Diffie%E2%80%93Hellman_Key_Exchange.svg/768px-Diffie%E2%80%93Hellman_Key_Exchange.svg.png" width="380" alt="Diffie-Hellman" />
+  <p><em>Find your match. No one else ever knows who you liked.</em></p>
+</div>
 
 ---
 
-Built with ❤️ using React Router.
+## Table of Contents
+
+- [What is Diffie Date?](#what-is-diffie-date)
+- [Cryptographic Protocol Overview](#cryptographic-protocol-overview)
+  - [1. Key Generation](#1-key-generation)
+  - [2. Self Token](#2-self-token)
+  - [3. Liking Another User](#3-liking-another-user)
+  - [4. Mutual Match Discovery](#4-mutual-match-discovery)
+  - [5. Payload Padding and Validation](#5-payload-padding-and-validation)
+  - [6. Privacy Properties](#6-privacy-properties)
+- [App Structure](#app-structure)
+- [How to Run](#how-to-run)
+- [Deployment (Docker, etc.)](#deployment-docker-etc)
+- [FAQ](#faq)
+- [Acknowledgements](#acknowledgements)
+
+---
+
+## What is Diffie Date?
+
+**Diffie Date** is a proof-of-concept "Tinder-like" app, but with a twist:
+
+- **No server can ever know who liked whom.**
+- **Only mutual likes are revealed.**
+- **All cryptographic keys are generated client-side and never leave your device.**
+
+This project is meant as a minimal, auditable demonstration of how modern cryptography can provide real user privacy even in social/dating apps—without trusting the backend.
+
+---
+
+## Cryptographic Protocol Overview
+
+The core cryptographic design follows a simplified, double-blind, mutual match protocol using secp256k1 (the Bitcoin/Ethereum curve) and Diffie-Hellman key exchange.
+
+The following is the actual, implemented flow (see [`app/math/crypto.ts`](./app/math/crypto.ts)):
+
+### 1. Key Generation
+
+Each user generates a **private key** \( s \) and corresponding **public key** \( P = g^s \) (using secp256k1).
+
+- Your user ID is: `sha256(P)`
+
+### 2. Self Token
+
+Each user computes a "self token" for authentication and registry uniqueness:
+\[
+S = H(P)^s
+\]
+Where \( H \) is a hash-to-curve function, using [RFC-9380 Simplified-SWU](https://datatracker.ietf.org/doc/html/rfc9380).
+
+### 3. Liking Another User
+
+To "like" user B, user A computes a **like token**:
+\[
+L_{A \to B} = P_B^{s_A} = g^{s_A s_B}
+\]
+This is a standard Diffie-Hellman shared secret *as a curve point*.
+
+- User A creates an encrypted, padded payload containing their ID and category (e.g., "Want to date"), using:
+  \[
+  K = \text{HKDF}(L_{A \to B})
+  \]
+  as the AES-GCM key.
+- A sends (`token`, `cipher`, `iv`) to the server.
+- No information about the "like" can be gleaned by the server from this data.
+
+### 4. Mutual Match Discovery
+
+If **both** users like each other:
+
+- The server sees two ciphers for the same token \( L \) (DH symmetry: \( L_{A \to B} = L_{B \to A} \)).
+- Each user can now use \( K \) to decrypt the other's payload, revealing each other's ID and category **only if the match is mutual**.
+
+### 5. Payload Padding and Validation
+
+- All payloads are padded to a fixed length (default: 256 bytes) to resist traffic analysis.
+- Upon decryption:
+  - The payload is UTF-8 decoded, parsed as JSON, and checked for the correct version and nonce.
+  - Any tampering or corruption results in a hard error (rejection). Silent failure is impossible by construction.
+- This ensures robust error handling and downgrade attack resistance.
+
+### 6. Privacy Properties
+
+- **No private keys, likes, or user data ever reach the server.**
+- **Non-mutual likes remain secret, even from the server.**
+- **Tokens are unlinkable to public keys or user identities.**
+- **All authentication is implicit in the cryptography—no signatures or explicit proofs required.**
+
+---
+
+## App Structure
+
+### Major Folders and Files
+
+- [`app/`](./app/)
+  - `math/crypto.ts` — All cryptographic primitives and helpers (keygen, tokens, AES-GCM, etc)
+  - `routes/` — Remix/React Router app routes (`index.tsx` main entry)
+    - `components/` — UI components (users list, debug panel, category selector, etc)
+  - `utils/db.*.ts` — Dumb file- or localStorage-backed DB used for demo (not production-grade)
+- `.react-router/types/` — Autogenerated type-safe route typings
+- `Dockerfile` — Multi-stage build for production or dev
+
+### Key Concepts
+
+- **Server never sees any secrets** — it's just a mailbox for tokens and ciphers.
+- **All encryption/decryption happens client-side** (WebCrypto).
+- **Self-registration and usernames** use unique tokens and can be edited in-app.
+
+---
+
+## How to Run
+
+### Prerequisites
+
+- Node.js v20+ recommended
+- (For prod) Docker
+
+### Dev Mode
+
+```sh
+npm install
+npm run dev
+````
+
+* Visit [http://localhost:5173](http://localhost:5173)
+
+### Production Build
+
+```sh
+npm run build
+npm run start
+```
+
+### Docker
+
+```sh
+docker build -t diffiedate .
+docker run -p 3000:3000 diffiedate
+```
+
+---
+
+## Deployment (Docker, etc.)
+
+Container can be run anywhere. For SSR, run as `node:20-alpine`, mapped to your port of choice (default 3000).
+
+Persistent data is stored in `db.json` in the container; mount as a volume for persistence.
+
+```sh
+docker run -v $PWD/db.json:/app/db.json -p 3000:3000 diffiedate
+```
+
+---
+
+## FAQ
+
+### Is this production ready?
+
+No. This is a **demo** of a robust, cryptographically private protocol in a modern SSR/SPA hybrid stack. Use for fun, local events, or as a base for more complex privacy-preserving protocols.
+
+### What happens if I clear localStorage?
+
+Your identity and private key are lost forever; you'll re-register as a new user. This is intentional—no recovery without key export/import (not implemented here).
+
+### Can the server or another user ever "unblind" the likes?
+
+No, unless your private key is compromised or you physically share your secrets.
+
+### Can I audit the cryptography?
+
+Yes. All logic is in `app/math/crypto.ts`, using [noble-curves](https://github.com/paulmillr/noble-curves) and standard WebCrypto.
+
+### How does this differ from Signal or Matrix?
+
+* Signal/Matrix use double-ratchet and signatures for chat. This is "just" mutual matching, no chat or message history.
+* **Diffie Date** is much simpler, does not require signatures or authenticated sessions.
+
+---
+
+## Acknowledgements
+
+* [noble-curves](https://github.com/paulmillr/noble-curves)
+* [React Router](https://reactrouter.com/)
+* [KaTeX](https://katex.org/) and [react-latex-next](https://www.npmjs.com/package/react-latex-next)
+* Many friends, cryptographers, and the anonymous inspiration from real-world need for actual privacy.
+
+---
+
+## License
+
+MIT
+
+---
+
+*Share, fork, and build better, more private social tech.*
+
+```
+```
