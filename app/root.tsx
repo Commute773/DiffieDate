@@ -41,6 +41,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
   );
 }
 
+export { action } from "./routes/action.server";
+
 export default function App() {
   return <Outlet />;
 }
