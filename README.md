@@ -1,4 +1,3 @@
-````md
 # Diffie Date
 
 A secure, double-blind, mutual matching platform built with React Router, Remix-style SSR, and end-to-end cryptography.
@@ -205,6 +204,3 @@ MIT
 ---
 
 *Share, fork, and build better, more private social tech.*
-
-```
-```
