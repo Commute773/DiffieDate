@@ -8,7 +8,7 @@ export default defineConfig({
     watch: {
       ignored: ["**/*.json"],
     },
-    allowedHosts: ["assuming-conscious-performed-inflation.trycloudflare.com"],
+    allowedHosts: ["woman-improve-watch-site.trycloudflare.com"],
   },
   test: {
     setupFiles: ["./setup-tests.ts"],

@@ -14,6 +14,7 @@ export const RegisterForm = ({
 }) => {
   const [username, setUsername] = useState("");
   const [loading, setLoading] = useState(false);
+  const [loaded, setLoaded] = useState(false);
 
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
@@ -31,10 +32,20 @@ export const RegisterForm = ({
         }));
         await register(registrations);
         setLoading(false);
+        setLoaded(true);
       }
     },
     [username, register]
   );
+
+  if (loaded) {
+    return (
+      <div className="text-center">
+        <h2 className="text-2xl font-bold mb-4">Registration Complete</h2>
+        <p className="text-gray-700 dark:text-gray-300">Refresh the page</p>
+      </div>
+    );
+  }
 
   return (
     <form onSubmit={handleSubmit}>

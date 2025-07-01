@@ -2,7 +2,7 @@
 
 import type { LoaderDataType } from "~/routes/loader.server";
 import type { LocalCrypto } from "./useLocalCrypto";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import type { User } from "~/utils/db.types";
 
 import { computeMatches } from "~/math/matches";
@@ -16,9 +16,8 @@ export const useMatches = (
   );
 
   useEffect(() => {
-    if (!localCryptos || localCryptos.length === 0) {
-      return;
-    }
+    if (!localCryptos || localCryptos.length === 0) return;
+
     Promise.all(
       localCryptos.map((localCrypto) =>
         computeMatches(
@@ -34,5 +33,11 @@ export const useMatches = (
     });
   }, [localCryptos, loaderData]);
 
-  return matches;
+  const sortedMatches = useMemo(() => {
+    return [...matches].sort((a, b) =>
+      a.user.username.localeCompare(b.user.username)
+    );
+  }, [matches]);
+
+  return sortedMatches;
 };

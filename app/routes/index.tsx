@@ -111,7 +111,7 @@ export default function Index() {
       {pendingForMe.length > 0 && (
         <section className="w-full max-w-2xl mb-12">
           <h2 className="text-2xl font-semibold mb-4 text-gray-900 dark:text-gray-100">
-            Pending Likes for You
+            Pending Potential Likes for You
           </h2>
           <ul className="space-y-4">
             {pendingForMe.map(({ like: l, myCategory, username }) => {

@@ -20,13 +20,23 @@ function findPendingLikesFor(userId: string, likes: GarbledLike[]) {
   return likes.filter((l) => l.to === userId && l.status === "pending");
 }
 
+function sortRecord<S, T extends Record<string, S>>(record: T) {
+  const sorted: Record<string, S> = {};
+  const keys = Object.keys(record);
+  keys.sort();
+  for (let key of keys) {
+    sorted[key] = record[key];
+  }
+  return sorted as T;
+}
+
 function groupUsersByBase(users: User[]) {
   const groups: Record<string, User[]> = {};
   for (const user of users) {
     if (!groups[user.username]) groups[user.username] = [];
     groups[user.username].push(user);
   }
-  return groups;
+  return sortRecord(groups);
 }
 
 export function useIndexPage() {
@@ -70,22 +80,28 @@ export function useIndexPage() {
   }
 
   // Find all pending likes for me (across both categories)
-  let pendingForMe: {
-    like: GarbledLike;
-    myCategory: Category;
-    username: string;
-  }[] = [];
-  for (const category of CATEGORIES) {
-    const myId = myIds[category];
-    const arr = findPendingLikesFor(myId, loaderData.garbledLikes).map(
-      (like) => ({
-        like,
-        myCategory: category,
-        username: like.from.split(":")[1],
-      })
-    );
-    pendingForMe = pendingForMe.concat(arr);
-  }
+
+  const sortedPendingForMe = useMemo(() => {
+    let pending: {
+      like: GarbledLike;
+      myCategory: Category;
+      username: string;
+    }[] = [];
+
+    for (const category of CATEGORIES) {
+      const myId = myIds[category];
+      const arr = findPendingLikesFor(myId, loaderData.garbledLikes).map(
+        (like) => ({
+          like,
+          myCategory: category,
+          username: like.from.split(":")[1],
+        })
+      );
+      pending = pending.concat(arr);
+    }
+
+    return pending.sort((a, b) => a.username.localeCompare(b.username));
+  }, [myIds, loaderData.garbledLikes]);
 
   // Handler for responding to a pending like
   async function handleRespondToLike(
@@ -139,7 +155,7 @@ export function useIndexPage() {
     registered,
     groupedUsers,
     alreadyLiked,
-    pendingForMe,
+    pendingForMe: sortedPendingForMe,
     handleRespondToLike,
     handleSendLike,
   };
